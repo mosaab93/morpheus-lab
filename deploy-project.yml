@@ -1,0 +1,65 @@
+---
+- name: Deploy a project website
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    project_name: "{{ morpheus['customOptions']['projectName'] | default('demo') }}"
+    project_dir: "/var/www/html/{{ project_name }}"
+
+  tasks:
+    - name: Validate project name
+      ansible.builtin.assert:
+        that:
+          - project_name is match('^[a-z][a-z0-9-]{0,39}$')
+        fail_msg: "Use lowercase letters, numbers and hyphens; start with a letter."
+
+    - name: Install Apache
+      ansible.builtin.dnf:
+        name: httpd
+        state: present
+
+    - name: Start and enable Apache
+      ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: Create project directory
+      ansible.builtin.file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Publish project page
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/index.html"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          <!doctype html>
+          <html>
+          <head><title>{{ project_name }}</title></head>
+          <body>
+            <h1>Project: {{ project_name }}</h1>
+            <p>Server: {{ ansible_facts['hostname'] }}</p>
+            <p>Deployed using Morpheus and Ansible</p>
+          </body>
+          </html>
+
+    - name: Check project page
+      ansible.builtin.uri:
+        url: "http://127.0.0.1/{{ project_name }}/"
+        return_content: true
+        status_code: 200
+      register: project_page
+
+    - name: Verify project content
+      ansible.builtin.assert:
+        that:
+          - "('Project: ' ~ project_name) in project_page.content"
+        success_msg: "Project {{ project_name }} deployed successfully."
