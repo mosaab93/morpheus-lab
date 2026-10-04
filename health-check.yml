@@ -1,0 +1,43 @@
+---
+- name: Check web server health
+  hosts: all
+  gather_facts: true
+  become: false
+
+  tasks:
+    - name: Display system facts
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ ansible_facts['hostname'] }}"
+          - "OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "RAM MB: {{ ansible_facts['memtotal_mb'] }}"
+
+    - name: Collect service status
+      ansible.builtin.service_facts:
+
+    - name: Verify Apache is installed
+      ansible.builtin.assert:
+        that:
+          - "'httpd.service' in ansible_facts['services']"
+        fail_msg: "Apache service was not found."
+
+    - name: Verify Apache is running
+      ansible.builtin.assert:
+        that:
+          - "ansible_facts['services']['httpd.service']['state'] == 'running'"
+        fail_msg: "Apache is not running."
+
+    - name: Retrieve the lab page
+      ansible.builtin.uri:
+        url: http://127.0.0.1/morpheus-lab.html
+        return_content: true
+        status_code: 200
+        timeout: 10
+      register: web_result
+
+    - name: Verify page content
+      ansible.builtin.assert:
+        that:
+          - "('Hello from ' ~ ansible_facts['hostname']) in web_result.content"
+        fail_msg: "The page does not contain the expected hostname."
+        success_msg: "Apache and the lab page are healthy."
